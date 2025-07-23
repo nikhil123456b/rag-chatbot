@@ -1,0 +1,15 @@
+# Ignore environment variables
+.env
+
+# Ignore compiled files
+__pycache__/
+*.pyc
+
+# Ignore FAISS or binary index files
+*.pkl
+*.faiss
+*.index
+
+# Ignore local vector DB storage
+embeddings/
+data/
