@@ -20,7 +20,6 @@ class QueryRequest(BaseModel):
 
 class QueryResponse(BaseModel):
     answer: str
-    sources: list[str]
 
 @app.get("/")
 def root():
@@ -29,11 +28,7 @@ def root():
 @app.post("/chat", response_model=QueryResponse)
 def chat_endpoint(payload: QueryRequest):
     try:
-        result = chatbot.invoke({"query": payload.query})
-        sources = [
-            doc.metadata.get("source", "unknown")
-            for doc in result.get("source_documents", [])
-        ]
-        return QueryResponse(answer=result["result"], sources=list(set(sources)))
+        result = chatbot.invoke({"question": payload.query})  # 👈 matches updated prompt format
+        return QueryResponse(answer=result["result"])
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,60 +1,82 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Suppresses INFO and WARNING logs from TensorFlow
-
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning, module='tensorflow')
-
+import re
 from dotenv import load_dotenv
+from langchain_groq import ChatGroq
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_ollama import OllamaLLM
+from langchain_core.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
-# Suppress TensorFlow warnings
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-warnings.filterwarnings("ignore")
-
+# Load environment variables
 load_dotenv()
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# Set your paths
-persist_path = "embeddings/vector_index/changi_langchain"
+# === Initialize Groq LLM ===
+llm = ChatGroq(
+    api_key=GROQ_API_KEY,
+    model="llama3-8b-8192"
+)
 
-# Load embeddings
-def get_embeddings():
-    return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+# === Load FAISS Vector Store ===
+print("✅ Loading FAISS vector store...")
+vector_store = FAISS.load_local(
+    "embeddings/vector_index/changi_langchain",
+    HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2"),
+    allow_dangerous_deserialization=True
+)
+print(f"📦 Total entries in index: {vector_store.index.ntotal}")
 
-# Load vector store
-def load_vectorstore():
-    if os.path.exists(persist_path):
-        print("✅ Loading prebuilt FAISS store...")
-        return FAISS.load_local(persist_path, embeddings=get_embeddings(), allow_dangerous_deserialization=True)
+# === Set Retriever ===
+retriever = vector_store.as_retriever(search_kwargs={"k": 5})
+
+# === Prompt Template ===
+template = """
+You are an expert travel assistant helping users with accurate and friendly information about Changi Airport and Jewel Changi.
+
+Use ONLY the context provided to answer the question.
+Be helpful and slightly conversational, but avoid generic phrases like "I'm happy to help" or "Let me know if you have more questions".
+If the answer is not found in the context, reply with:
+"Sorry, I couldn't find that in the available info."
+
+Context:
+{context}
+
+Question: {question}
+
+Answer (be concise yet informative):
+"""
+
+prompt = PromptTemplate(
+    input_variables=["context", "question"],
+    template=template
+)
+
+# === Retrieval Q&A Chain ===
+chain = RetrievalQA.from_chain_type(
+    llm=llm,
+    retriever=retriever,
+    chain_type="stuff",
+    chain_type_kwargs={"prompt": prompt},
+    return_source_documents=False,
+    input_key="question"  # 👈 ensures it expects "question" instead of "query"
+)
+
+# === Interactive Chat Loop ===
+while True:
+    user_query = input("\nAsk a question (or type 'exit'): ").strip()
+    if user_query.lower() in ["exit", "quit"]:
+        break
+
+    # Optional: Terminal filtering
+    terminal_match = re.search(r"terminal\s?(\d+)", user_query, re.IGNORECASE)
+    if terminal_match:
+        terminal_number = f"T{terminal_match.group(1)}"
+        print(f"🔍 Filtering chunks for: Terminal {terminal_match.group(1)}")
+        retriever.search_kwargs["filter"] = {"terminal": terminal_number}
     else:
-        raise FileNotFoundError("Vector store not found. Please run preprocessing first.")
+        retriever.search_kwargs.pop("filter", None)
 
-# Create chatbot chain
-def create_chatbot():
-    vectorstore = load_vectorstore()
-    retriever = vectorstore.as_retriever()
-    llm = OllamaLLM(model="phi3")
-    chatbot = RetrievalQA.from_chain_type(
-        llm=llm,
-        retriever=retriever,
-        return_source_documents=True,
-        input_key="query"  # Explicitly declare expected input key
-    )
-    return chatbot
+    # Get answer
+    response = chain.invoke({"question": user_query})
 
-# Main interaction
-if __name__ == "__main__":
-    chatbot = create_chatbot()
-
-    while True:
-        query = input("\nAsk a question (or type 'exit'): ").strip()
-        if query.lower() == "exit":
-            break
-        result = chatbot.invoke({"query": query})
-        print(f"\n🧠 Answer: {result['result']}\n")
-        if result.get("source_documents"):
-            print("📚 Sources:")
-            for doc in result["source_documents"]:
-                print(f"- {doc.metadata.get('source', 'Unknown')}")
+    print(f"\n🧠 Answer: {response['result']}")
