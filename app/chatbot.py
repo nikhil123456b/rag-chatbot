@@ -18,7 +18,7 @@ llm = ChatGroq(
 )
 
 # === Load FAISS Vector Store with FakeEmbeddings (no SBERT model in memory) ===
-print("Loading FAISS vector store...")
+print("✅ Loading FAISS vector store...")
 vector_store = FAISS.load_local(
     "embeddings/vector_index/changi_langchain",
     FakeEmbeddings(size=384),  #  lighter for memory-constrained deploys
