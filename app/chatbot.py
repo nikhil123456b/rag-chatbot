@@ -5,7 +5,7 @@ from langchain_groq import ChatGroq
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import FakeEmbeddings  # ✅ use dummy embeddings for loading
 
 # Load environment variables
 load_dotenv()
@@ -17,14 +17,14 @@ llm = ChatGroq(
     model="llama3-8b-8192"
 )
 
-# === Load FAISS Vector Store ===
-print("✅ Loading FAISS vector store...")
+# === Load FAISS Vector Store with FakeEmbeddings (no SBERT model in memory) ===
+print("Loading FAISS vector store...")
 vector_store = FAISS.load_local(
     "embeddings/vector_index/changi_langchain",
-    HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2"),
+    FakeEmbeddings(size=384),  #  lighter for memory-constrained deploys
     allow_dangerous_deserialization=True
 )
-print(f"📦 Total entries in index: {vector_store.index.ntotal}")
+print(f"Total entries in index: {vector_store.index.ntotal}")
 
 # === Set Retriever ===
 retriever = vector_store.as_retriever(search_kwargs={"k": 5})
@@ -58,25 +58,29 @@ chain = RetrievalQA.from_chain_type(
     chain_type="stuff",
     chain_type_kwargs={"prompt": prompt},
     return_source_documents=False,
-    input_key="question"  # 👈 ensures it expects "question" instead of "query"
+    input_key="question"
 )
 
-# === Interactive Chat Loop ===
-while True:
-    user_query = input("\nAsk a question (or type 'exit'): ").strip()
-    if user_query.lower() in ["exit", "quit"]:
-        break
+# === Exportable chatbot for FastAPI ===
+def create_chatbot():
+    return chain
 
-    # Optional: Terminal filtering
-    terminal_match = re.search(r"terminal\s?(\d+)", user_query, re.IGNORECASE)
-    if terminal_match:
-        terminal_number = f"T{terminal_match.group(1)}"
-        print(f"🔍 Filtering chunks for: Terminal {terminal_match.group(1)}")
-        retriever.search_kwargs["filter"] = {"terminal": terminal_number}
-    else:
-        retriever.search_kwargs.pop("filter", None)
+# === Optional CLI Testing ===
+if __name__ == "__main__":
+    while True:
+        user_query = input("\nAsk a question (or type 'exit'): ").strip()
+        if user_query.lower() in ["exit", "quit"]:
+            break
 
-    # Get answer
-    response = chain.invoke({"question": user_query})
+        # Terminal filtering
+        terminal_match = re.search(r"terminal\s?(\d+)", user_query, re.IGNORECASE)
+        if terminal_match:
+            terminal_number = f"T{terminal_match.group(1)}"
+            print(f"🔍 Filtering chunks for: Terminal {terminal_match.group(1)}")
+            retriever.search_kwargs["filter"] = {"terminal": terminal_number}
+        else:
+            retriever.search_kwargs.pop("filter", None)
 
-    print(f"\n🧠 Answer: {response['result']}")
+        # Get answer
+        response = chain.invoke({"question": user_query})
+        print(f"\n Answer: {response['result']}")
