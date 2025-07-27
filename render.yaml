@@ -2,7 +2,9 @@ services:
   - type: web
     name: changi-rag-chatbot
     runtime: python
-    buildCommand: pip install  -r requirements.txt
+    buildCommand: |
+      pip install -r requirements.txt
+      unzip -o data/changi_langchain.zip -d embeddings/vector_index/
     startCommand: uvicorn app.api:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: GROQ_API_KEY
