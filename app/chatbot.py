@@ -5,7 +5,7 @@ from langchain_groq import ChatGroq
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
-from langchain_community.embeddings import FakeEmbeddings  # ✅ use dummy embeddings for loading
+from langchain_community.embeddings import FakeEmbeddings  #  use dummy embeddings for loading
 
 # Load environment variables
 load_dotenv()
@@ -18,7 +18,7 @@ llm = ChatGroq(
 )
 
 # === Load FAISS Vector Store with FakeEmbeddings (no SBERT model in memory) ===
-print("✅ Loading FAISS vector store...")
+print("Loading FAISS vector store...")
 vector_store = FAISS.load_local(
     "embeddings/vector_index/changi_langchain",
     FakeEmbeddings(size=384),  #  lighter for memory-constrained deploys
@@ -76,7 +76,7 @@ if __name__ == "__main__":
         terminal_match = re.search(r"terminal\s?(\d+)", user_query, re.IGNORECASE)
         if terminal_match:
             terminal_number = f"T{terminal_match.group(1)}"
-            print(f"🔍 Filtering chunks for: Terminal {terminal_match.group(1)}")
+            print(f"Filtering chunks for: Terminal {terminal_match.group(1)}")
             retriever.search_kwargs["filter"] = {"terminal": terminal_number}
         else:
             retriever.search_kwargs.pop("filter", None)
